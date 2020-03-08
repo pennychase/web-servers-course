@@ -1,12 +1,12 @@
-name: web-lesson2
+name: web-lesson4
 version: 0
-homepage: https://typeclasses.com/web-servers/lesson-2
+homepage: https://typeclasses.com/web-servers/lesson-4
 build-type: Simple
 cabal-version: >= 1.10
 
 library
     hs-source-dirs: .
-    exposed-modules: WebLesson2
+    exposed-modules: WebLesson4
     default-language: Haskell2010
 
     build-depends:
@@ -14,4 +14,4 @@ library
       , bytestring
       , network
       , network-simple >= 0.4.2
-
+      , text
