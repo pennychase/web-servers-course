@@ -1,9 +1,13 @@
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports -fdefer-typed-holes #-}
 
-module WebLesson4 where
+{-# LANGUAGE TypeApplications #-}
+
+module WebLesson5 where
 
 -- base
+import qualified Data.Char as Char
 import qualified Data.List as List
+import           Data.Word (Word8)
 import           Numeric   (showInt)
 
 -- bytestring
@@ -12,8 +16,10 @@ import qualified Data.ByteString.Builder    as BSB
 import qualified Data.ByteString.Char8      as ASCII
 import qualified Data.ByteString.Lazy       as LBS
 import qualified Data.ByteString.Lazy.Char8 as LASCII
-import Data.Text
-import Data.Text.Encoding
+
+-- contravariant
+import Data.Functor.Contravariant
+    (Equivalence (..), contramap, defaultEquivalence)
 
 -- network
 import           Network.Socket                 (Socket)
@@ -129,6 +135,10 @@ newtype RequestTarget = RequestTarget BS.ByteString    deriving (Eq, Show)
 --  Lesson 4: Response encoding
 --------------------------------------------------------------------------------
 
+{- In lesson 4, we wrote a function for encoding our abstract representation of
+a Response as a byte string suitable for transmission over a network according
+to the HTTP protocol. -}
+
 -- RFC 7230, section 1.2: Syntax Notation
 
 encodeDigit :: Digit -> BSB.Builder
@@ -186,12 +196,78 @@ encodeReasonPhrase (ReasonPhrase x) = BSB.byteString x
 
 encodeHeaderField :: HeaderField -> BSB.Builder
 encodeHeaderField (HeaderField (FieldName x) (FieldValue y)) =
-    BSB.byteString x
-    <> BSB.string7 ": "
-    <> BSB.byteString y
+    BSB.byteString x <> BSB.string7 ": " <> BSB.byteString y
 
 -- RFC 7230, section 3.3: Message Body
 
 encodeMessageBody :: MessageBody -> BSB.Builder
-encodeMessageBody (MessageBody x) =
-    BSB.lazyByteString x
+encodeMessageBody (MessageBody x) = BSB.lazyByteString x
+
+
+--------------------------------------------------------------------------------
+--  Lesson 5: Constructing and using Responses
+--------------------------------------------------------------------------------
+
+staticResponseServer :: Response -> IO ()
+staticResponseServer response =
+  server $ \socket ->
+    LSocket.sendAll socket
+      (BSB.toLazyByteString (encodeResponse response))
+
+------------------------------------------
+
+helloResponse_withMoreTypes :: Response
+helloResponse_withMoreTypes =
+    Response
+      (StatusLine
+        (HttpVersion D1 D1)
+        (StatusCode D2 D0 D0)
+        (ReasonPhrase (ASCII.pack "OK")))
+      [ HeaderField
+            (FieldName (ASCII.pack "Content-Type"))
+            (FieldValue (ASCII.pack "text/plain; charset=us-ascii"))
+        , HeaderField
+            (FieldName (ASCII.pack "Content-Length"))
+            (FieldValue (ASCII.pack "7"))
+      ]
+      (Just (MessageBody (LASCII.pack "Hello!\n")))
+
+
+------------------------------------------
+
+http_1_1 :: HttpVersion
+http_1_1 = HttpVersion D1 D1
+
+status200 :: StatusCode
+status200 = StatusCode D2 D0 D0
+
+reasonOK :: ReasonPhrase
+reasonOK = ReasonPhrase (ASCII.pack "OK")
+
+contentLengthHeader :: Integral a => a -> HeaderField
+contentLengthHeader contentLength =
+    HeaderField
+        (FieldName (ASCII.pack "Content-Length"))
+        (FieldValue (ASCII.pack (showInt contentLength "")))
+
+contentTypeHeader :: String -> HeaderField
+contentTypeHeader contentType =
+    HeaderField
+        (FieldName (ASCII.pack "Content-Type"))
+        (FieldValue (ASCII.pack contentType))
+
+plainTextAsciiHeader :: HeaderField
+plainTextAsciiHeader = contentTypeHeader "text/plain; charset=us-ascii"
+
+asciiMessageBody :: String -> MessageBody
+asciiMessageBody x = MessageBody (LASCII.pack x)
+
+------------------------------------------
+
+helloResponse_moreConveniently :: Response
+helloResponse_moreConveniently =
+  Response statusLine headerList bodyMaybe
+  where
+    statusLine = StatusLine http_1_1 status200 reasonOK
+    headerList = [ plainTextAsciiHeader, contentLengthHeader (7 :: Integer) ]
+    bodyMaybe = Just (asciiMessageBody "Hello!\n")
